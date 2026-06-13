@@ -10,6 +10,38 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
 
+[project.optional-dependencies]
+download = [
+  "huggingface_hub[cli]>=0.23.0",
+]
+inference = [
+  "accelerate>=0.30.0",
+  "bitsandbytes>=0.43.0; platform_system == 'Linux'",
+  "peft>=0.11.0",
+  "torch>=2.1.0",
+  "transformers>=4.41.0",
+]
+train = [
+  "accelerate>=0.30.0",
+  "bitsandbytes>=0.43.0; platform_system == 'Linux'",
+  "datasets>=2.19.0",
+  "huggingface_hub[cli]>=0.23.0",
+  "peft>=0.11.0",
+  "torch>=2.1.0",
+  "transformers>=4.41.0",
+  "trl>=0.9.0",
+]
+all = [
+  "accelerate>=0.30.0",
+  "bitsandbytes>=0.43.0; platform_system == 'Linux'",
+  "datasets>=2.19.0",
+  "huggingface_hub[cli]>=0.23.0",
+  "peft>=0.11.0",
+  "torch>=2.1.0",
+  "transformers>=4.41.0",
+  "trl>=0.9.0",
+]
+
 [project.scripts]
 codeir = "codeir.cli:main"
 
