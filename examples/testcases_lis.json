@@ -1,0 +1,31 @@
+{
+  "problem_id": "lc-300-demo",
+  "entry_point": "lengthOfLIS",
+  "test_cases": [
+    {
+      "input": {
+        "nums": [10, 9, 2, 5, 3, 7, 101, 18]
+      },
+      "expected": 4
+    },
+    {
+      "input": {
+        "nums": [0, 1, 0, 3, 2, 3]
+      },
+      "expected": 4
+    },
+    {
+      "input": {
+        "nums": [7, 7, 7, 7]
+      },
+      "expected": 1
+    },
+    {
+      "input": {
+        "nums": []
+      },
+      "expected": 0
+    }
+  ],
+  "timeout_sec": 10
+}

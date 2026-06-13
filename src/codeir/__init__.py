@@ -1,0 +1,2 @@
+"""CodeIR minimal deployment package."""
+

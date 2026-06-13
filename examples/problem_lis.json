@@ -1,0 +1,6 @@
+{
+  "problem_id": "lc-300-demo",
+  "difficulty": "medium",
+  "statement": "给定整数数组 nums，返回其中最长严格递增子序列的长度。子序列是由数组删除若干（含0）元素、不改变剩余元素顺序得到的序列。约束：1 <= nums.length <= 2500，-10^4 <= nums[i] <= 10^4。",
+  "signature": "def lengthOfLIS(self, nums: List[int]) -> int"
+}
