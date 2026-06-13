@@ -4,6 +4,8 @@ import argparse
 import json
 import os
 
+from .exporters import export_llamafactory_datasets
+from .infer import resolve_default_demo_prompt, run_adapter_inference
 from .pipeline import derive_from_directory, run_distillation
 from .schemas import (
     load_json,
@@ -33,6 +35,25 @@ def build_parser() -> argparse.ArgumentParser:
     derive_parser.add_argument("--verified-root", required=True)
     derive_parser.add_argument("--output-root", default="data")
     derive_parser.add_argument("--ir-format", choices=["yaml", "json"], default="yaml")
+
+    export_parser = subparsers.add_parser(
+        "export-llamafactory",
+        help="Export derived SFT datasets into LlamaFactory Alpaca format",
+    )
+    export_parser.add_argument("--output-root", default="data")
+    export_parser.add_argument("--export-root", default="artifacts")
+    export_parser.add_argument("--dataset-dir-name", default="codeir_llamafactory")
+
+    infer_parser = subparsers.add_parser(
+        "infer-adapter",
+        help="Run one demo inference using a LoRA adapter and a prepared sample",
+    )
+    infer_parser.add_argument("--base-model", required=True)
+    infer_parser.add_argument("--adapter-path", required=True)
+    infer_parser.add_argument("--prompt-file")
+    infer_parser.add_argument("--output-root", default="data")
+    infer_parser.add_argument("--arm", choices=["armA", "armB", "baseline"], default="baseline")
+    infer_parser.add_argument("--max-new-tokens", type=int, default=512)
     return parser
 
 
@@ -88,6 +109,26 @@ def main() -> None:
             ir_format=args.ir_format,
         )
         print(json.dumps({"derived": count}, ensure_ascii=False))
+        return
+
+    if args.command == "export-llamafactory":
+        exported = export_llamafactory_datasets(
+            output_root=args.output_root,
+            export_root=args.export_root,
+            dataset_dir_name=args.dataset_dir_name,
+        )
+        print(json.dumps({"exported": exported}, ensure_ascii=False))
+        return
+
+    if args.command == "infer-adapter":
+        prompt_file = args.prompt_file or resolve_default_demo_prompt(args.output_root, args.arm)
+        text = run_adapter_inference(
+            base_model=args.base_model,
+            adapter_path=args.adapter_path,
+            prompt_path=prompt_file,
+            max_new_tokens=args.max_new_tokens,
+        )
+        print(json.dumps({"prompt_file": prompt_file, "response": text}, ensure_ascii=False))
         return
 
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 import json
 import os
 
@@ -88,7 +87,7 @@ class TransformersTeacherProvider(TeacherProvider):
 def build_teacher_prompt(problem: ProblemSpec) -> str:
     return (
         "你是算法竞赛专家。给定一道编程题，先输出结构化解题中间表示(CodeIR)，"
-        "再输出对应 Python 代码。输出必须是 JSON，字段含 codeir 与 code。\n\n"
+        "再输出对应 Python 代码。输出必须是 JSON，字段包含 codeir 和 code。\n\n"
         f"problem_id: {problem.problem_id}\n"
         f"difficulty: {problem.difficulty}\n"
         f"signature: {problem.signature}\n"

@@ -53,6 +53,40 @@ python .\run_codeir.py distill --problem examples\problem_lis.json --tests examp
 python .\run_codeir.py derive --verified-root data\verified_triples --output-root data
 ```
 
+## Linux 一键部署
+
+Linux 下当前脚本已经改成“只下载老师和学生模型，不配环境”：
+
+```bash
+bash deploy/linux_one_click.sh
+```
+
+使用时需要显式提供老师/学生仓库，以及它们的预估体积：
+
+```bash
+TEACHER_MODEL_ID=<your_teacher_repo> \
+STUDENT_MODEL_ID=<your_student_repo> \
+TEACHER_SIZE_GB=22 \
+STUDENT_SIZE_GB=14 \
+DISK_BUDGET_GB=50 \
+bash deploy/linux_one_click.sh
+```
+
+脚本会先检查：
+
+- 你声明的老师+学生体积之和不超过 `50G`
+- 实际磁盘可用空间不少于 `50G`
+
+脚本默认使用 Hugging Face 国内镜像：
+
+```bash
+HF_MIRROR=https://hf-mirror.com
+```
+
+如果你有自己的镜像，可以直接覆盖 `HF_MIRROR`。
+
+更多变量和限制见 [deploy/linux_requirements_note.md](/D:/PycharmProjects/CodeIR/deploy/linux_requirements_note.md:1)。
+
 ## 环境变量
 
 - `CODEIR_PROVIDER=mock|transformers`
