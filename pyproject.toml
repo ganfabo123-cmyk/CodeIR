@@ -15,30 +15,30 @@ download = [
   "huggingface_hub[cli]>=0.23.0",
 ]
 inference = [
-  "accelerate>=0.30.0",
-  "bitsandbytes>=0.43.0; platform_system == 'Linux'",
-  "peft>=0.11.0",
-  "torch>=2.1.0",
-  "transformers>=4.41.0",
+  "accelerate==1.1.1",
+  "bitsandbytes==0.43.3; platform_system == 'Linux'",
+  "peft==0.13.2",
+  "torch==2.5.1",
+  "transformers==4.46.3",
 ]
 train = [
-  "accelerate>=0.30.0",
-  "bitsandbytes>=0.43.0; platform_system == 'Linux'",
+  "accelerate==1.1.1",
+  "bitsandbytes==0.43.3; platform_system == 'Linux'",
   "datasets>=2.19.0",
   "huggingface_hub[cli]>=0.23.0",
-  "peft>=0.11.0",
-  "torch>=2.1.0",
-  "transformers>=4.41.0",
+  "peft==0.13.2",
+  "torch==2.5.1",
+  "transformers==4.46.3",
   "trl>=0.9.0",
 ]
 all = [
-  "accelerate>=0.30.0",
-  "bitsandbytes>=0.43.0; platform_system == 'Linux'",
+  "accelerate==1.1.1",
+  "bitsandbytes==0.43.3; platform_system == 'Linux'",
   "datasets>=2.19.0",
   "huggingface_hub[cli]>=0.23.0",
-  "peft>=0.11.0",
-  "torch>=2.1.0",
-  "transformers>=4.41.0",
+  "peft==0.13.2",
+  "torch==2.5.1",
+  "transformers==4.46.3",
   "trl>=0.9.0",
 ]
 
