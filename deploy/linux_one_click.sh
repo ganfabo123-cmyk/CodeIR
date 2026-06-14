@@ -8,12 +8,12 @@ MODEL_ROOT="${MODEL_ROOT:-$ROOT_DIR/workdir/models}"
 HF_MIRROR="${HF_MIRROR:-https://hf-mirror.com}"
 HF_TOKEN="${HF_TOKEN:-}"
 
-TEACHER_MODEL_ID="${TEACHER_MODEL_ID:-}"
-STUDENT_MODEL_ID="${STUDENT_MODEL_ID:-}"
+TEACHER_MODEL_ID="${TEACHER_MODEL_ID:-Qwen/Qwen2.5-32B-Instruct}"
+STUDENT_MODEL_ID="${STUDENT_MODEL_ID:-Qwen/Qwen2.5-7B}"
 
 DISK_BUDGET_GB="${DISK_BUDGET_GB:-50}"
-TEACHER_SIZE_GB="${TEACHER_SIZE_GB:-0}"
-STUDENT_SIZE_GB="${STUDENT_SIZE_GB:-0}"
+TEACHER_SIZE_GB="${TEACHER_SIZE_GB:-34}"
+STUDENT_SIZE_GB="${STUDENT_SIZE_GB:-16}"
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%F %T')" "$*"
@@ -94,7 +94,7 @@ main() {
   require_var "STUDENT_MODEL_ID" "$STUDENT_MODEL_ID"
 
   if (( TEACHER_SIZE_GB <= 0 || STUDENT_SIZE_GB <= 0 )); then
-    die "Set TEACHER_SIZE_GB and STUDENT_SIZE_GB explicitly so the 50G budget check is meaningful."
+    die "TEACHER_SIZE_GB and STUDENT_SIZE_GB must be positive integers."
   fi
 
   check_budget "$TEACHER_SIZE_GB" "$STUDENT_SIZE_GB" "$DISK_BUDGET_GB"
