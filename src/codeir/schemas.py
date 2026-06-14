@@ -42,7 +42,12 @@ class Triple:
 class TestCaseSpec:
     problem_id: str
     entry_point: str
-    test_cases: list[dict[str, Any]]
+    # Legacy mode: explicit [{"input": {...}, "expected": ...}] cases.
+    test_cases: list[dict[str, Any]] = field(default_factory=list)
+    # Human-eval mode (LeetCodeDataset): a `check(candidate)` function source.
+    check_program: str | None = None
+    # Optional import prefix to exec before candidate code (dataset `prompt` field).
+    prompt_imports: str = ""
     timeout_sec: int = 10
 
 
@@ -92,7 +97,9 @@ def tests_from_dict(raw: dict[str, Any]) -> TestCaseSpec:
     return TestCaseSpec(
         problem_id=raw["problem_id"],
         entry_point=raw["entry_point"],
-        test_cases=raw["test_cases"],
+        test_cases=raw.get("test_cases", []),
+        check_program=raw.get("check_program"),
+        prompt_imports=raw.get("prompt_imports", ""),
         timeout_sec=raw.get("timeout_sec", 10),
     )
 

@@ -47,8 +47,33 @@ def _build_runner(code: str, tests: TestCaseSpec) -> str:
     return "\n".join(lines)
 
 
+def _build_check_runner(code: str, tests: TestCaseSpec) -> str:
+    """Human-eval style runner (LeetCodeDataset).
+
+    Execs optional import prefix, the candidate `class Solution`, then the dataset
+    `check(candidate)` program, and invokes it with the bound entry-point method.
+    Mirrors the LeetCodeDataset convention `check(Solution().<entry_point>)`.
+    """
+    lines = [
+        "import json",
+        "namespace = {}",
+        f"exec(compile({tests.prompt_imports!r}, '<imports>', 'exec'), namespace, namespace)",
+        f"exec(compile({code!r}, '<candidate>', 'exec'), namespace, namespace)",
+        f"exec(compile({tests.check_program!r}, '<check>', 'exec'), namespace, namespace)",
+        "check = namespace['check']",
+        "solution = namespace['Solution']()",
+        f"candidate = getattr(solution, {tests.entry_point!r})",
+        "check(candidate)",
+        "print(json.dumps({'passed': 1, 'total': 1}))",
+    ]
+    return "\n".join(lines)
+
+
 def verify_code(code: str, tests: TestCaseSpec) -> VerificationResult:
-    runner = _build_runner(code, tests)
+    if tests.check_program:
+        runner = _build_check_runner(code, tests)
+    else:
+        runner = _build_runner(code, tests)
     with tempfile.TemporaryDirectory(prefix="codeir_verify_") as temp_dir:
         script_path = Path(temp_dir) / "runner.py"
         script_path.write_text(runner, encoding="utf-8")

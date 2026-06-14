@@ -9,9 +9,8 @@ RUNTIME_ROOT="${RUNTIME_ROOT:-$ROOT_DIR/workdir/runtime}"
 HF_MIRROR="${HF_MIRROR:-https://hf-mirror.com}"
 HF_TOKEN="${HF_TOKEN:-}"
 
-TEACHER_MODEL_ID="${TEACHER_MODEL_ID:-bartowski/Qwen2.5-32B-Instruct-GGUF}"
-TEACHER_MODEL_FILE="${TEACHER_MODEL_FILE:-Qwen2.5-32B-Instruct-Q8_0.gguf}"
-TEACHER_SIZE_GB="${TEACHER_SIZE_GB:-35}"
+TEACHER_MODEL_ID="${TEACHER_MODEL_ID:-Qwen/Qwen2.5-32B-Instruct}"
+TEACHER_SIZE_GB="${TEACHER_SIZE_GB:-66}"
 
 TMP_ROOT_DIR="$RUNTIME_ROOT/tmp-teacher"
 
@@ -84,21 +83,25 @@ prepare_hf() {
 download_teacher() {
   local cli
   local dest_dir="$MODEL_ROOT/$(basename "$TEACHER_MODEL_ID")"
-  local dest_file="$dest_dir/$TEACHER_MODEL_FILE"
+  local repo_files
+  local local_files
 
   cli="$(hf_download_cmd)"
   mkdir -p "$dest_dir"
 
-  if [[ -f "$dest_file" ]]; then
-    log "Teacher model already exists: $dest_file"
+  repo_files="$($cli repo-files "$TEACHER_MODEL_ID" 2>/dev/null | awk 'NF {count++} END {print count+0}')"
+  local_files="$(find "$dest_dir" -type f 2>/dev/null | wc -l | awk '{print $1}')"
+
+  if (( repo_files > 0 )) && (( local_files >= repo_files )); then
+    log "Teacher model already exists: $dest_dir"
     return 0
   fi
 
-  log "Downloading $TEACHER_MODEL_ID -> $dest_file"
+  log "Downloading $TEACHER_MODEL_ID -> $dest_dir"
   if [[ "$cli" == "hf" ]]; then
-    hf download "$TEACHER_MODEL_ID" --include "$TEACHER_MODEL_FILE" --local-dir "$dest_dir"
+    hf download "$TEACHER_MODEL_ID" --local-dir "$dest_dir"
   else
-    huggingface-cli download "$TEACHER_MODEL_ID" --include "$TEACHER_MODEL_FILE" --local-dir "$dest_dir"
+    huggingface-cli download "$TEACHER_MODEL_ID" --local-dir "$dest_dir"
   fi
 }
 
@@ -118,7 +121,6 @@ main() {
 
   log "Teacher model download completed."
   log "Teacher model: $TEACHER_MODEL_ID"
-  log "Teacher file: $TEACHER_MODEL_FILE"
   log "Saved under: $MODEL_ROOT"
 }
 
