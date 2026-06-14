@@ -50,16 +50,40 @@ def _find_balanced_object(text: str) -> str:
     raise ValueError(f"Unbalanced JSON object in teacher output: {text[:240]!r}")
 
 
+def _try_parse(candidate: str) -> dict | None:
+    """Best-effort JSON parse with escalating leniency.
+
+    Models frequently emit invalid JSON when embedding Python code (literal
+    newlines / unescaped quotes inside the "code" string). We try:
+      1. strict json
+      2. strict=False (tolerates literal control chars inside strings)
+      3. json_repair, if it happens to be installed (optional, no hard dep)
+    """
+    try:
+        return json.loads(candidate)
+    except JSONDecodeError:
+        pass
+    try:
+        return json.loads(candidate, strict=False)
+    except JSONDecodeError:
+        pass
+    try:
+        import json_repair  # type: ignore
+
+        repaired = json_repair.loads(candidate)
+        if isinstance(repaired, dict):
+            return repaired
+    except Exception:
+        pass
+    return None
+
+
 def extract_json_block(text: str) -> dict:
     cleaned = _trim_fence(text)
     candidate = _find_balanced_object(cleaned)
-    try:
-        payload = json.loads(candidate)
-    except JSONDecodeError as exc:
-        raise ValueError(
-            f"Failed to parse teacher JSON near {candidate[:240]!r}: {exc}"
-        ) from exc
-
+    payload = _try_parse(candidate)
+    if payload is None:
+        raise ValueError(f"Failed to parse teacher JSON near {candidate[:240]!r}")
     if not isinstance(payload, dict):
         raise ValueError(f"Teacher output must be a JSON object, got {type(payload).__name__}.")
     return payload

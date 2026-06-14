@@ -58,6 +58,14 @@ def build_parser() -> argparse.ArgumentParser:
     batch_parser.add_argument("--ir-format", choices=["yaml", "json"], default="yaml")
     batch_parser.add_argument("--manifest", default=None, help="Write data_gen metrics into this manifest.")
     batch_parser.add_argument("--run-id", default="A-exp")
+    batch_parser.add_argument(
+        "--no-resume", action="store_true",
+        help="Regenerate every problem even if a verified triple already exists.",
+    )
+    batch_parser.add_argument(
+        "--abort-after-errors", type=int, default=8,
+        help="Stop after N consecutive generation errors (API down/out of credit); 0 disables.",
+    )
 
     eval_parser = subparsers.add_parser(
         "eval-compare",
@@ -171,6 +179,8 @@ def main() -> None:
             provider_name=args.provider,
             max_resamples=args.max_resamples,
             ir_format=args.ir_format,
+            resume=not args.no_resume,
+            abort_after_errors=args.abort_after_errors,
         )
         if args.manifest:
             from .metrics import update_section

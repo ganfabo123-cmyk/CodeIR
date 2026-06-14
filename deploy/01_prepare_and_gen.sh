@@ -14,23 +14,33 @@ activate_env
 setup_logging "01_prepare_and_gen"
 
 # ---- 1. dependencies ----
-log "==== install codeir + deps ===="
-python -m pip install --upgrade pip >/dev/null
-python -m pip install -e ".[all]"
+# Design: LLaMA-Factory owns the whole ML stack (torch/transformers/peft/
+# accelerate/datasets/trl) as one self-consistent set. codeir installs with
+# --no-deps so it never re-pins or fights that stack. Everything is install-once
+# and skipped on re-runs (FORCE_INSTALL=1 to force a reinstall).
+LF_HOME="${LF_HOME:-$PROJECT_DIR/third_party/LLaMA-Factory}"
+# Official GitHub source. If the clone times out in CN, override LF_REPO with a
+# GitHub proxy, e.g.:
+#   LF_REPO=https://gh-proxy.com/https://github.com/hiyouga/LLaMA-Factory.git
+LF_REPO="${LF_REPO:-https://github.com/hiyouga/LLaMA-Factory.git}"
+LF_REF="${LF_REF:-v0.9.2}"
 
-if ! python -c "import llamafactory" 2>/dev/null; then
-  LF_HOME="${LF_HOME:-$PROJECT_DIR/third_party/LLaMA-Factory}"
-  # Official GitHub source. If the clone times out in CN, override LF_REPO with a
-  # GitHub proxy, e.g.:
-  #   LF_REPO=https://gh-proxy.com/https://github.com/hiyouga/LLaMA-Factory.git
-  LF_REPO="${LF_REPO:-https://github.com/hiyouga/LLaMA-Factory.git}"
-  # Pin a tag compatible with Python 3.10 (latest main requires >=3.11).
-  LF_REF="${LF_REF:-v0.9.2}"
-  log "==== install LlamaFactory into $LF_HOME (from $LF_REPO @ $LF_REF) ===="
-  if [ ! -d "$LF_HOME" ]; then
-    git clone --depth 1 --branch "$LF_REF" "$LF_REPO" "$LF_HOME"
+if [ "${FORCE_INSTALL:-0}" != "1" ] && \
+   python -c "import codeir, llamafactory, torch, transformers, peft, datasets" 2>/dev/null; then
+  log "==== deps already present; skip install (FORCE_INSTALL=1 to force) ===="
+else
+  python -m pip install --upgrade pip >/dev/null
+  # 1a. LLaMA-Factory first: it brings the consistent ML stack.
+  if ! python -c "import llamafactory" 2>/dev/null; then
+    log "==== install LlamaFactory into $LF_HOME (from $LF_REPO @ $LF_REF) ===="
+    if [ ! -d "$LF_HOME" ]; then
+      git clone --depth 1 --branch "$LF_REF" "$LF_REPO" "$LF_HOME"
+    fi
+    python -m pip install -e "$LF_HOME"
   fi
-  python -m pip install -e "$LF_HOME"
+  # 1b. codeir editable, no deps -> never disturbs the ML stack above.
+  log "==== install codeir (--no-deps) ===="
+  python -m pip install -e . --no-deps
 fi
 
 # ---- 2. validate api teacher env (.env) ----

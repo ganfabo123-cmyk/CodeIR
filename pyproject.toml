@@ -10,37 +10,28 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
 
+# NOTE: On the training server the ML stack (torch/transformers/peft/accelerate/
+# datasets/trl) is owned by LLaMA-Factory as one self-consistent set, and codeir
+# is installed with --no-deps (see deploy/01_prepare_and_gen.sh). These extras are
+# only for standalone use; they use loose floors (py3.11 / CUDA 12.x friendly) so
+# they do NOT pin exact versions and fight an existing install.
 [project.optional-dependencies]
 download = [
   "huggingface_hub[cli]>=0.23.0",
 ]
-inference = [
-  "accelerate==1.1.1",
-  "bitsandbytes==0.43.3; platform_system == 'Linux'",
-  "peft==0.13.2",
-  "torch==2.5.1",
-  "transformers==4.46.3",
+ml = [
+  "torch>=2.4",
+  "transformers>=4.45,<5",
+  "peft>=0.12",
+  "accelerate>=1.0",
+  "datasets>=2.19",
+  "trl>=0.9",
+  "huggingface_hub>=0.23",
 ]
-train = [
-  "accelerate==1.1.1",
-  "bitsandbytes==0.43.3; platform_system == 'Linux'",
-  "datasets>=2.19.0",
-  "huggingface_hub[cli]>=0.23.0",
-  "peft==0.13.2",
-  "torch==2.5.1",
-  "transformers==4.46.3",
-  "trl>=0.9.0",
-]
-all = [
-  "accelerate==1.1.1",
-  "bitsandbytes==0.43.3; platform_system == 'Linux'",
-  "datasets>=2.19.0",
-  "huggingface_hub[cli]>=0.23.0",
-  "peft==0.13.2",
-  "torch==2.5.1",
-  "transformers==4.46.3",
-  "trl>=0.9.0",
-]
+# Back-compat aliases: all/inference/train resolve to the same loose ML set.
+inference = ["codeir[ml]"]
+train = ["codeir[ml]"]
+all = ["codeir[ml]"]
 
 [project.scripts]
 codeir = "codeir.cli:main"
