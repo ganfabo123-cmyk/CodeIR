@@ -89,13 +89,19 @@ class TransformersTeacherProvider(TeacherProvider):
 
         model, tokenizer = self._ensure_model()
         messages = [{"role": "user", "content": build_teacher_prompt(problem)}]
-        input_ids = tokenizer.apply_chat_template(
+        rendered = tokenizer.apply_chat_template(
             messages,
+            tokenize=True,
             add_generation_prompt=True,
             return_tensors="pt",
         )
-        input_ids = input_ids.to(model.device)
-        attention_mask = torch.ones_like(input_ids)
+        if hasattr(rendered, "to") and hasattr(rendered, "input_ids"):
+            rendered = rendered.to(model.device)
+            input_ids = rendered.input_ids
+            attention_mask = rendered.attention_mask
+        else:
+            input_ids = rendered.to(model.device) if hasattr(rendered, "to") else torch.as_tensor(rendered, device=model.device)
+            attention_mask = torch.ones_like(input_ids)
 
         generation_kwargs = {
             "input_ids": input_ids,

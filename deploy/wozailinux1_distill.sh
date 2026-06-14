@@ -4,7 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-VENV_DIR="${VENV_DIR:-$ROOT_DIR/.venv-linux}"
+CONDA_ENV_NAME="${CONDA_ENV_NAME:-}"
+CONDA_SH_PATH="${CONDA_SH_PATH:-}"
+PYTHON_BIN=""
+
 LOG_ROOT="${LOG_ROOT:-$ROOT_DIR/workdir/logs}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-$ROOT_DIR/data}"
 PROBLEM_FILE="${PROBLEM_FILE:-$ROOT_DIR/examples/problem_lis.json}"
@@ -12,118 +15,116 @@ TESTS_FILE="${TESTS_FILE:-$ROOT_DIR/examples/testcases_lis.json}"
 PROVIDER="${PROVIDER:-transformers}"
 MAX_RESAMPLES="${MAX_RESAMPLES:-8}"
 CODEIR_MODEL_PATH="${CODEIR_MODEL_PATH:-/backup01/ganfabo/models/Qwen2.5-32B-Instruct}"
-PYTHON_BIN="${PYTHON_BIN:-}"
+
+TORCH_VERSION="${TORCH_VERSION:-2.5.1}"
+TORCHVISION_VERSION="${TORCHVISION_VERSION:-0.20.1}"
+TORCHAUDIO_VERSION="${TORCHAUDIO_VERSION:-2.5.1}"
+TORCH_INDEX_URL="${TORCH_INDEX_URL:-https://download.pytorch.org/whl/cu124}"
+TRANSFORMERS_VERSION="${TRANSFORMERS_VERSION:-4.46.3}"
+ACCELERATE_VERSION="${ACCELERATE_VERSION:-1.1.1}"
+PEFT_VERSION="${PEFT_VERSION:-0.13.2}"
+BITSANDBYTES_VERSION="${BITSANDBYTES_VERSION:-0.43.3}"
 
 mkdir -p "$LOG_ROOT" "$OUTPUT_ROOT"
 
 LOG_FILE="$LOG_ROOT/wozailinux1_distill_$(date '+%Y%m%d_%H%M%S').log"
-LATEST_LOG="$LOG_ROOT/wozailinux1_distill_latest.log"
-ln -sfn "$LOG_FILE" "$LATEST_LOG"
 exec > >(tee -a "$LOG_FILE") 2>&1
-
-log() {
-  printf '\n[%s] %s\n' "$(date '+%F %T')" "$*"
-}
 
 die() {
   echo "ERROR: $*" >&2
   exit 1
 }
 
-require_cmd() {
-  command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
-}
-
-resolve_python() {
-  if [[ -n "$PYTHON_BIN" ]]; then
-    echo "$PYTHON_BIN"
+find_conda_sh() {
+  if [[ -n "$CONDA_SH_PATH" && -f "$CONDA_SH_PATH" ]]; then
+    echo "$CONDA_SH_PATH"
     return 0
   fi
-  if command -v python3 >/dev/null 2>&1; then
-    echo "python3"
+  if command -v conda >/dev/null 2>&1; then
+    conda info --base 2>/dev/null | awk 'NF {print $0 "/etc/profile.d/conda.sh"; exit}'
     return 0
   fi
-  if command -v python >/dev/null 2>&1; then
-    echo "python"
-    return 0
-  fi
-  die "Missing required command: python3"
+  for candidate in "$HOME/miniconda3/etc/profile.d/conda.sh" "$HOME/anaconda3/etc/profile.d/conda.sh"; do
+    if [[ -f "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+  return 1
 }
 
-venv_is_ready() {
-  [[ -x "$VENV_DIR/bin/python" ]] && "$VENV_DIR/bin/python" -m pip --version >/dev/null 2>&1
-}
-
-deps_are_ready() {
-  if ! venv_is_ready; then
-    return 1
-  fi
-  "$VENV_DIR/bin/python" -c "import torch, transformers" >/dev/null 2>&1
-}
-
-ensure_env() {
-  local py
-  py="$(resolve_python)"
-
-  if ! venv_is_ready; then
-    log "Creating virtualenv at $VENV_DIR"
-    "$py" -m venv "$VENV_DIR"
-  else
-    log "Reusing virtualenv at $VENV_DIR"
-  fi
-
-  if deps_are_ready; then
-    log "Python inference dependencies already available."
+activate_conda() {
+  if [[ -n "${CONDA_PREFIX:-}" && -x "${CONDA_PREFIX}/bin/python" ]]; then
+    PYTHON_BIN="${CONDA_PREFIX}/bin/python"
     return 0
   fi
 
-  log "Installing inference dependencies into $VENV_DIR"
-  "$VENV_DIR/bin/python" -m pip install --upgrade pip setuptools wheel
-  "$VENV_DIR/bin/python" -m pip install -e ".[inference]" --no-build-isolation
+  [[ -n "$CONDA_ENV_NAME" ]] || die "CONDA_ENV_NAME is required when no conda env is active."
+  local conda_sh
+  conda_sh="$(find_conda_sh)" || die "Unable to locate conda.sh"
+  # shellcheck disable=SC1090
+  source "$conda_sh"
+  conda activate "$CONDA_ENV_NAME"
+  PYTHON_BIN="$(command -v python)"
+  [[ -n "$PYTHON_BIN" ]] || die "Failed to resolve python from conda environment."
 }
 
-check_inputs() {
-  [[ -d "$CODEIR_MODEL_PATH" ]] || die "Model path does not exist: $CODEIR_MODEL_PATH"
-  [[ -f "$PROBLEM_FILE" ]] || die "Problem file does not exist: $PROBLEM_FILE"
-  [[ -f "$TESTS_FILE" ]] || die "Tests file does not exist: $TESTS_FILE"
+ensure_repo_installed() {
+  "$PYTHON_BIN" -m pip install -e . --no-deps --no-build-isolation
 }
 
-run_distill() {
-  export CODEIR_MODEL_PATH
-  export PYTHONUTF8=1
-  export PYTHONIOENCODING=utf-8
-
-  log "Running distill with provider=$PROVIDER"
-  log "Model path: $CODEIR_MODEL_PATH"
-  log "Problem file: $PROBLEM_FILE"
-  log "Tests file: $TESTS_FILE"
-  log "Output root: $OUTPUT_ROOT"
-
-  "$VENV_DIR/bin/python" "$ROOT_DIR/run_codeir.py" distill \
-    --problem "$PROBLEM_FILE" \
-    --tests "$TESTS_FILE" \
-    --provider "$PROVIDER" \
-    --output-root "$OUTPUT_ROOT" \
-    --max-resamples "$MAX_RESAMPLES"
+sync_runtime_deps() {
+  "$PYTHON_BIN" -m pip install --upgrade pip setuptools wheel
+  "$PYTHON_BIN" -m pip install --upgrade --force-reinstall \
+    --index-url "$TORCH_INDEX_URL" \
+    "torch==${TORCH_VERSION}" \
+    "torchvision==${TORCHVISION_VERSION}" \
+    "torchaudio==${TORCHAUDIO_VERSION}"
+  "$PYTHON_BIN" -m pip install --upgrade --force-reinstall \
+    "transformers==${TRANSFORMERS_VERSION}" \
+    "accelerate==${ACCELERATE_VERSION}" \
+    "peft==${PEFT_VERSION}" \
+    "bitsandbytes==${BITSANDBYTES_VERSION}"
 }
 
-show_success_hint() {
-  local triple_path="$OUTPUT_ROOT/verified_triples/lc-300-demo.json"
-  if [[ -f "$triple_path" ]]; then
-    log "Verified triple written to $triple_path"
-  else
-    log "No verified triple found yet under $OUTPUT_ROOT/verified_triples"
+ensure_runtime_versions() {
+  if "$PYTHON_BIN" - <<PY
+from importlib.metadata import version
+expected = {
+    "torch": "${TORCH_VERSION}",
+    "torchvision": "${TORCHVISION_VERSION}",
+    "torchaudio": "${TORCHAUDIO_VERSION}",
+    "transformers": "${TRANSFORMERS_VERSION}",
+    "accelerate": "${ACCELERATE_VERSION}",
+    "peft": "${PEFT_VERSION}",
+    "bitsandbytes": "${BITSANDBYTES_VERSION}",
+}
+for name, want in expected.items():
+    if version(name) != want:
+        raise SystemExit(1)
+PY
+  then
+    return 0
   fi
-  log "Latest log symlink: $LATEST_LOG"
+
+  sync_runtime_deps
 }
 
-main() {
-  require_cmd bash
-  require_cmd tee
-  ensure_env
-  check_inputs
-  run_distill
-  show_success_hint
-}
+[[ -d "$CODEIR_MODEL_PATH" ]] || die "Model path does not exist: $CODEIR_MODEL_PATH"
+[[ -f "$PROBLEM_FILE" ]] || die "Problem file does not exist: $PROBLEM_FILE"
+[[ -f "$TESTS_FILE" ]] || die "Tests file does not exist: $TESTS_FILE"
 
-main "$@"
+activate_conda
+ensure_runtime_versions
+ensure_repo_installed
+
+export CODEIR_MODEL_PATH
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
+"$PYTHON_BIN" "$ROOT_DIR/run_codeir.py" distill \
+  --problem "$PROBLEM_FILE" \
+  --tests "$TESTS_FILE" \
+  --provider "$PROVIDER" \
+  --output-root "$OUTPUT_ROOT" \
+  --max-resamples "$MAX_RESAMPLES"
