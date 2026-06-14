@@ -20,9 +20,12 @@ python -m pip install -e ".[all]"
 
 if ! python -c "import llamafactory" 2>/dev/null; then
   LF_HOME="${LF_HOME:-$PROJECT_DIR/third_party/LLaMA-Factory}"
-  log "==== install LlamaFactory into $LF_HOME ===="
+  # Default to the Gitee mirror (GitHub clone often times out in CN).
+  # Override with LF_REPO=... (e.g. a gh-proxy URL) if needed.
+  LF_REPO="${LF_REPO:-https://gitee.com/hiyouga/LLaMA-Factory.git}"
+  log "==== install LlamaFactory into $LF_HOME (from $LF_REPO) ===="
   if [ ! -d "$LF_HOME" ]; then
-    git clone --depth 1 https://github.com/hiyouga/LLaMA-Factory "$LF_HOME"
+    git clone --depth 1 "$LF_REPO" "$LF_HOME"
   fi
   python -m pip install -e "$LF_HOME"
 fi
