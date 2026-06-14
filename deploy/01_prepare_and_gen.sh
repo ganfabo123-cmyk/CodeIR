@@ -24,9 +24,11 @@ if ! python -c "import llamafactory" 2>/dev/null; then
   # GitHub proxy, e.g.:
   #   LF_REPO=https://gh-proxy.com/https://github.com/hiyouga/LLaMA-Factory.git
   LF_REPO="${LF_REPO:-https://github.com/hiyouga/LLaMA-Factory.git}"
-  log "==== install LlamaFactory into $LF_HOME (from $LF_REPO) ===="
+  # Pin a tag compatible with Python 3.10 (latest main requires >=3.11).
+  LF_REF="${LF_REF:-v0.9.2}"
+  log "==== install LlamaFactory into $LF_HOME (from $LF_REPO @ $LF_REF) ===="
   if [ ! -d "$LF_HOME" ]; then
-    git clone --depth 1 "$LF_REPO" "$LF_HOME"
+    git clone --depth 1 --branch "$LF_REF" "$LF_REPO" "$LF_HOME"
   fi
   python -m pip install -e "$LF_HOME"
 fi
