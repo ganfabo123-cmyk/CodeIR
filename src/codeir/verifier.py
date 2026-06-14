@@ -50,9 +50,12 @@ def _build_runner(code: str, tests: TestCaseSpec) -> str:
 def _build_check_runner(code: str, tests: TestCaseSpec) -> str:
     """Human-eval style runner (LeetCodeDataset).
 
-    Execs optional import prefix, the candidate `class Solution`, then the dataset
-    `check(candidate)` program, and invokes it with the bound entry-point method.
-    Mirrors the LeetCodeDataset convention `check(Solution().<entry_point>)`.
+    Execs the import prefix (dataset `prompt`: typing + ListNode/TreeNode helpers),
+    the candidate `class Solution`, then the dataset `check(candidate)` program,
+    and invokes it as `check(<entry_point>)`.
+
+    NOTE: LeetCodeDataset's `entry_point` is a *callable expression* such as
+    "Solution().twoSum", so it is eval'd (not getattr'd).
     """
     lines = [
         "import json",
@@ -61,8 +64,7 @@ def _build_check_runner(code: str, tests: TestCaseSpec) -> str:
         f"exec(compile({code!r}, '<candidate>', 'exec'), namespace, namespace)",
         f"exec(compile({tests.check_program!r}, '<check>', 'exec'), namespace, namespace)",
         "check = namespace['check']",
-        "solution = namespace['Solution']()",
-        f"candidate = getattr(solution, {tests.entry_point!r})",
+        f"candidate = eval({tests.entry_point!r}, namespace)",
         "check(candidate)",
         "print(json.dumps({'passed': 1, 'total': 1}))",
     ]
