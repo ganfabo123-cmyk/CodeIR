@@ -28,6 +28,18 @@ ensure_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
 }
 
+hf_download_cmd() {
+  if command -v hf >/dev/null 2>&1; then
+    echo "hf"
+    return 0
+  fi
+  if command -v huggingface-cli >/dev/null 2>&1; then
+    echo "huggingface-cli"
+    return 0
+  fi
+  die "Missing required command: hf"
+}
+
 require_var() {
   local name="$1"
   local value="$2"
@@ -63,7 +75,11 @@ check_free_space() {
 
 prepare_hf() {
   if [[ -n "$HF_TOKEN" ]]; then
-    huggingface-cli login --token "$HF_TOKEN" --add-to-git-credential
+    if [[ "$(hf_download_cmd)" == "hf" ]]; then
+      hf auth login --token "$HF_TOKEN" --add-to-git-credential
+    else
+      huggingface-cli login --token "$HF_TOKEN" --add-to-git-credential
+    fi
   fi
   if [[ -n "$HF_MIRROR" ]]; then
     export HF_ENDPOINT="$HF_MIRROR"
@@ -83,12 +99,16 @@ download_model() {
   fi
 
   log "Downloading $model_id -> $dest_path"
-  huggingface-cli download "$model_id" --local-dir "$dest_path"
+  if [[ "$(hf_download_cmd)" == "hf" ]]; then
+    hf download "$model_id" --local-dir "$dest_path"
+  else
+    huggingface-cli download "$model_id" --local-dir "$dest_path"
+  fi
 }
 
 main() {
-  ensure_cmd huggingface-cli
   ensure_cmd df
+  hf_download_cmd >/dev/null
 
   require_var "TEACHER_MODEL_ID" "$TEACHER_MODEL_ID"
   require_var "STUDENT_MODEL_ID" "$STUDENT_MODEL_ID"
