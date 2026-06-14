@@ -40,15 +40,31 @@ log() { printf '\n[%s] %s\n' "$(date '+%F %T')" "$*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 activate_env() {
-  local conda_base
-  conda_base="$(conda info --base 2>/dev/null || true)"
-  [ -n "$conda_base" ] || die "conda not found on PATH"
-  # shellcheck disable=SC1091
-  source "$conda_base/etc/profile.d/conda.sh"
-  conda activate "$CONDA_ENV" || die "cannot activate conda env: $CONDA_ENV"
+  # If the target env is already active, don't touch conda at all
+  # (avoids conda plugin errors such as anaconda-anon-usage).
+  if [ "${CONDA_DEFAULT_ENV:-}" != "$CONDA_ENV" ]; then
+    local conda_sh=""
+    if [ -n "${CONDA_EXE:-}" ]; then
+      conda_sh="$(dirname "$(dirname "$CONDA_EXE")")/etc/profile.d/conda.sh"
+    fi
+    local sourced=0
+    for cand in "${CONDA_SH:-}" "$conda_sh" \
+                "$HOME/miniconda3/etc/profile.d/conda.sh" \
+                "$HOME/anaconda3/etc/profile.d/conda.sh" \
+                "/opt/conda/etc/profile.d/conda.sh"; do
+      if [ -n "$cand" ] && [ -f "$cand" ]; then
+        # shellcheck disable=SC1090
+        source "$cand"
+        sourced=1
+        break
+      fi
+    done
+    [ "$sourced" = "1" ] || die "conda.sh not found; activate '$CONDA_ENV' manually then rerun, or set CONDA_SH"
+    conda activate "$CONDA_ENV" || die "cannot activate conda env: $CONDA_ENV"
+  fi
   cd "$PROJECT_DIR" || die "PROJECT_DIR not found: $PROJECT_DIR"
   export PYTHONPATH="$PROJECT_DIR/src:${PYTHONPATH:-}"
-  log "env ready: conda=$CONDA_ENV cuda=$CUDA_VISIBLE_DEVICES project=$PROJECT_DIR"
+  log "env ready: conda=${CONDA_DEFAULT_ENV:-?} cuda=$CUDA_VISIBLE_DEVICES project=$PROJECT_DIR"
 }
 
 setup_logging() {
