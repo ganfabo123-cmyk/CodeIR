@@ -204,4 +204,8 @@ def load_teacher_provider(
         if not model_path:
             raise RuntimeError("CODEIR_MODEL_PATH is required for transformers provider.")
         return TransformersTeacherProvider(model_path)
+    if provider_name == "api":
+        from .teacher_api import build_api_provider_from_env
+
+        return build_api_provider_from_env()
     raise ValueError(f"Unknown provider: {provider_name}")

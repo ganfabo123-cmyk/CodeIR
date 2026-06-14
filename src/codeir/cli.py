@@ -6,7 +6,7 @@ import os
 
 from .exporters import export_llamafactory_datasets
 from .infer import resolve_default_demo_prompt, run_adapter_inference
-from .pipeline import derive_from_directory, run_distillation
+from .pipeline import derive_from_directory, run_distillation, run_distillation_batch
 from .schemas import (
     load_json,
     problem_from_dict,
@@ -30,6 +30,50 @@ def build_parser() -> argparse.ArgumentParser:
     distill_parser.add_argument("--output-root", default="data")
     distill_parser.add_argument("--provider", default=os.environ.get("CODEIR_PROVIDER", "mock"))
     distill_parser.add_argument("--max-resamples", type=int, default=8)
+
+    prepare_parser = subparsers.add_parser(
+        "prepare-leetcode",
+        help="Download LeetCodeDataset, map fields, split into raw_problems/{train,test}",
+    )
+    prepare_parser.add_argument("--output-root", default="data")
+    prepare_parser.add_argument("--n-train", type=int, default=300)
+    prepare_parser.add_argument("--n-test", type=int, default=100)
+    prepare_parser.add_argument("--version", default=None)
+    prepare_parser.add_argument("--smoke", action="store_true")
+    prepare_parser.add_argument(
+        "--dump-sample",
+        default=None,
+        help="If set, dump one raw dataset record to this path and exit (for field/check inspection).",
+    )
+
+    batch_parser = subparsers.add_parser(
+        "distill-batch",
+        help="Batch teacher generation + verification + 3-line derivation over a directory",
+    )
+    batch_parser.add_argument("--problems-dir", required=True)
+    batch_parser.add_argument("--tests-dir", required=True)
+    batch_parser.add_argument("--output-root", default="data")
+    batch_parser.add_argument("--provider", default=os.environ.get("CODEIR_PROVIDER", "mock"))
+    batch_parser.add_argument("--max-resamples", type=int, default=8)
+    batch_parser.add_argument("--ir-format", choices=["yaml", "json"], default="yaml")
+    batch_parser.add_argument("--manifest", default=None, help="Write data_gen metrics into this manifest.")
+    batch_parser.add_argument("--run-id", default="A-exp")
+
+    eval_parser = subparsers.add_parser(
+        "eval-compare",
+        help="M6: pass@1 baseline (single) vs experiment (A->B cascade) + report",
+    )
+    eval_parser.add_argument("--base-model", required=True)
+    eval_parser.add_argument("--adapter-baseline", required=True)
+    eval_parser.add_argument("--adapter-armA", required=True)
+    eval_parser.add_argument("--adapter-armB", required=True)
+    eval_parser.add_argument("--test-problem-dir", required=True)
+    eval_parser.add_argument("--test-tests-dir", required=True)
+    eval_parser.add_argument("--manifest", default="artifacts/metrics_manifest.json")
+    eval_parser.add_argument("--report", default="artifacts/比对报告.md")
+    eval_parser.add_argument("--max-new-tokens", type=int, default=1024)
+    eval_parser.add_argument("--ir-max-new-tokens", type=int, default=512)
+    eval_parser.add_argument("--run-id", default="A-exp")
 
     derive_parser = subparsers.add_parser("derive", help="Derive SFT data from verified triples")
     derive_parser.add_argument("--verified-root", required=True)
@@ -100,6 +144,62 @@ def main() -> None:
                 ensure_ascii=False,
             )
         )
+        return
+
+    if args.command == "prepare-leetcode":
+        from .datasets_leetcode import dump_raw_sample, prepare_leetcode
+
+        if args.dump_sample:
+            dump_raw_sample(args.dump_sample, version=args.version)
+            print(json.dumps({"dumped": args.dump_sample}, ensure_ascii=False))
+            return
+        counts = prepare_leetcode(
+            output_root=args.output_root,
+            n_train=args.n_train,
+            n_test=args.n_test,
+            version=args.version,
+            smoke=args.smoke,
+        )
+        print(json.dumps(counts, ensure_ascii=False))
+        return
+
+    if args.command == "distill-batch":
+        metrics = run_distillation_batch(
+            problems_dir=args.problems_dir,
+            tests_dir=args.tests_dir,
+            output_root=args.output_root,
+            provider_name=args.provider,
+            max_resamples=args.max_resamples,
+            ir_format=args.ir_format,
+        )
+        if args.manifest:
+            from .metrics import update_section
+
+            update_section(
+                args.manifest, "data_gen", metrics,
+                run_id=args.run_id,
+                config={"provider": args.provider},
+            )
+        print(json.dumps(metrics, ensure_ascii=False))
+        return
+
+    if args.command == "eval-compare":
+        from .eval_compare import evaluate_compare
+
+        manifest = evaluate_compare(
+            base_model=args.base_model,
+            adapter_baseline=args.adapter_baseline,
+            adapter_armA=args.adapter_armA,
+            adapter_armB=args.adapter_armB,
+            test_problem_dir=args.test_problem_dir,
+            test_tests_dir=args.test_tests_dir,
+            manifest_path=args.manifest,
+            report_path=args.report,
+            max_new_tokens=args.max_new_tokens,
+            ir_max_new_tokens=args.ir_max_new_tokens,
+            run_id=args.run_id,
+        )
+        print(json.dumps(manifest["verdict"], ensure_ascii=False))
         return
 
     if args.command == "derive":
