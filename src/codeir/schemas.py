@@ -120,7 +120,7 @@ def load_json(path: str | Path) -> dict[str, Any]:
 def dump_json(path: str | Path, payload: Any) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2),
+        json.dumps(payload, ensure_ascii=False, indent=2, default=str),
         encoding="utf-8",
     )
 
