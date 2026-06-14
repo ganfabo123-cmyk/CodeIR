@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT_DIR"
+
+MODEL_ROOT="${MODEL_ROOT:-$ROOT_DIR/workdir/models}"
+RUNTIME_ROOT="${RUNTIME_ROOT:-$ROOT_DIR/workdir/runtime}"
+HF_MIRROR="${HF_MIRROR:-https://hf-mirror.com}"
+HF_TOKEN="${HF_TOKEN:-}"
+
+TEACHER_MODEL_ID="${TEACHER_MODEL_ID:-bartowski/Qwen2.5-32B-Instruct-GGUF}"
+TEACHER_MODEL_FILE="${TEACHER_MODEL_FILE:-Qwen2.5-32B-Instruct-Q8_0.gguf}"
+TEACHER_SIZE_GB="${TEACHER_SIZE_GB:-35}"
+
+TMP_ROOT_DIR="$RUNTIME_ROOT/tmp-teacher"
+
+log() {
+  printf '\n[%s] %s\n' "$(date '+%F %T')" "$*"
+}
+
+die() {
+  echo "ERROR: $*" >&2
+  exit 1
+}
+
+ensure_cmd() {
+  command -v "$1" >/dev/null 2>&1 || die "Missing required command: $1"
+}
+
+hf_download_cmd() {
+  if command -v hf >/dev/null 2>&1; then
+    echo "hf"
+    return 0
+  fi
+  if command -v huggingface-cli >/dev/null 2>&1; then
+    echo "huggingface-cli"
+    return 0
+  fi
+  die "Missing required command: hf"
+}
+
+check_free_space() {
+  local target_dir="$1"
+  local need_gb="$2"
+  mkdir -p "$target_dir"
+
+  local free_kb
+  free_kb="$(df -Pk "$target_dir" | awk 'NR==2 {print $4}')"
+  local free_gb=$((free_kb / 1024 / 1024))
+
+  if (( free_gb < need_gb )); then
+    die "Free space ${free_gb}G is below required ${need_gb}G for teacher model download."
+  fi
+  log "Free space check passed: ${free_gb}G available at $target_dir"
+}
+
+prepare_runtime_dirs() {
+  mkdir -p "$MODEL_ROOT" "$TMP_ROOT_DIR"
+  export TMPDIR="$TMP_ROOT_DIR"
+  export TEMP="$TMP_ROOT_DIR"
+  export TMP="$TMP_ROOT_DIR"
+  log "Using minimal temporary files under $RUNTIME_ROOT"
+}
+
+cleanup_runtime_dirs() {
+  rm -rf "$TMP_ROOT_DIR"
+}
+
+prepare_hf() {
+  if [[ -n "$HF_TOKEN" ]]; then
+    if [[ "$(hf_download_cmd)" == "hf" ]]; then
+      hf auth login --token "$HF_TOKEN" --add-to-git-credential
+    else
+      huggingface-cli login --token "$HF_TOKEN" --add-to-git-credential
+    fi
+  fi
+  if [[ -n "$HF_MIRROR" ]]; then
+    export HF_ENDPOINT="$HF_MIRROR"
+    log "Using Hugging Face mirror: $HF_ENDPOINT"
+  fi
+}
+
+download_teacher() {
+  local cli
+  local dest_dir="$MODEL_ROOT/$(basename "$TEACHER_MODEL_ID")"
+  local dest_file="$dest_dir/$TEACHER_MODEL_FILE"
+
+  cli="$(hf_download_cmd)"
+  mkdir -p "$dest_dir"
+
+  if [[ -f "$dest_file" ]]; then
+    log "Teacher model already exists: $dest_file"
+    return 0
+  fi
+
+  log "Downloading $TEACHER_MODEL_ID -> $dest_file"
+  if [[ "$cli" == "hf" ]]; then
+    hf download "$TEACHER_MODEL_ID" --include "$TEACHER_MODEL_FILE" --local-dir "$dest_dir"
+  else
+    huggingface-cli download "$TEACHER_MODEL_ID" --include "$TEACHER_MODEL_FILE" --local-dir "$dest_dir"
+  fi
+}
+
+main() {
+  ensure_cmd df
+  hf_download_cmd >/dev/null
+  trap cleanup_runtime_dirs EXIT
+
+  if (( TEACHER_SIZE_GB <= 0 )); then
+    die "TEACHER_SIZE_GB must be a positive integer."
+  fi
+
+  check_free_space "$MODEL_ROOT" "$TEACHER_SIZE_GB"
+  prepare_runtime_dirs
+  prepare_hf
+  download_teacher
+
+  log "Teacher model download completed."
+  log "Teacher model: $TEACHER_MODEL_ID"
+  log "Teacher file: $TEACHER_MODEL_FILE"
+  log "Saved under: $MODEL_ROOT"
+}
+
+main "$@"

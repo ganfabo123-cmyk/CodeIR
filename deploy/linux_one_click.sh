@@ -9,14 +9,14 @@ RUNTIME_ROOT="${RUNTIME_ROOT:-$ROOT_DIR/workdir/runtime}"
 HF_MIRROR="${HF_MIRROR:-https://hf-mirror.com}"
 HF_TOKEN="${HF_TOKEN:-}"
 
+TEACHER_MODEL_ID="${TEACHER_MODEL_ID:-bartowski/Qwen2.5-32B-Instruct-GGUF}"
+TEACHER_MODEL_FILE="${TEACHER_MODEL_FILE:-Qwen2.5-32B-Instruct-Q8_0.gguf}"
 STUDENT_MODEL_ID="${STUDENT_MODEL_ID:-Qwen/Qwen2.5-7B}"
 
-DISK_BUDGET_GB="${DISK_BUDGET_GB:-50}"
+DISK_BUDGET_GB="${DISK_BUDGET_GB:-55}"
+TEACHER_SIZE_GB="${TEACHER_SIZE_GB:-35}"
 STUDENT_SIZE_GB="${STUDENT_SIZE_GB:-16}"
 
-HF_HOME_DIR="$RUNTIME_ROOT/hf-home"
-HF_CACHE_DIR="$RUNTIME_ROOT/hf-cache"
-HF_ASSETS_DIR="$RUNTIME_ROOT/hf-assets"
 TMP_ROOT_DIR="$RUNTIME_ROOT/tmp"
 
 log() {
@@ -51,13 +51,15 @@ require_var() {
 }
 
 check_budget() {
-  local student_gb="$1"
-  local budget_gb="$2"
+  local teacher_gb="$1"
+  local student_gb="$2"
+  local budget_gb="$3"
+  local total_gb=$((teacher_gb + student_gb))
 
-  if (( student_gb > budget_gb )); then
-    die "Declared student model size ${student_gb}G exceeds DISK_BUDGET_GB=${budget_gb}."
+  if (( total_gb > budget_gb )); then
+    die "Declared model size ${total_gb}G exceeds DISK_BUDGET_GB=${budget_gb}."
   fi
-  log "Declared model size check passed: student=${student_gb}G budget=${budget_gb}G"
+  log "Declared model size check passed: teacher=${teacher_gb}G student=${student_gb}G total=${total_gb}G budget=${budget_gb}G"
 }
 
 check_free_space() {
@@ -76,22 +78,17 @@ check_free_space() {
 }
 
 prepare_runtime_dirs() {
-  mkdir -p "$MODEL_ROOT" "$HF_HOME_DIR" "$HF_CACHE_DIR" "$HF_ASSETS_DIR" "$TMP_ROOT_DIR"
+  mkdir -p "$MODEL_ROOT" "$TMP_ROOT_DIR"
 
-  export HF_HOME="$HF_HOME_DIR"
-  export HF_HUB_CACHE="$HF_CACHE_DIR"
-  export HUGGINGFACE_HUB_CACHE="$HF_CACHE_DIR"
-  export HF_ASSETS_CACHE="$HF_ASSETS_DIR"
-  export XDG_CACHE_HOME="$RUNTIME_ROOT/xdg-cache"
   export TMPDIR="$TMP_ROOT_DIR"
   export TEMP="$TMP_ROOT_DIR"
   export TMP="$TMP_ROOT_DIR"
 
-  log "Redirecting Hugging Face cache and temp files under $RUNTIME_ROOT"
+  log "Using minimal temporary files under $RUNTIME_ROOT"
 }
 
 cleanup_runtime_dirs() {
-  rm -rf "$HF_HOME_DIR" "$HF_CACHE_DIR" "$HF_ASSETS_DIR" "$RUNTIME_ROOT/xdg-cache" "$TMP_ROOT_DIR"
+  rm -rf "$TMP_ROOT_DIR"
 }
 
 prepare_hf() {
@@ -110,7 +107,8 @@ prepare_hf() {
 
 download_model() {
   local model_id="$1"
-  local dest_dir="$2"
+  local include_pattern="$2"
+  local dest_dir="$3"
   local dest_path="$dest_dir/$(basename "$model_id")"
   local cli
   local repo_files
@@ -119,7 +117,11 @@ download_model() {
   cli="$(hf_download_cmd)"
 
   mkdir -p "$dest_dir"
-  repo_files="$($cli repo-files "$model_id" 2>/dev/null | awk 'NF {count++} END {print count+0}')"
+  if [[ -n "$include_pattern" ]]; then
+    repo_files="1"
+  else
+    repo_files="$($cli repo-files "$model_id" 2>/dev/null | awk 'NF {count++} END {print count+0}')"
+  fi
   local_files="$(find "$dest_path" -type f 2>/dev/null | wc -l | awk '{print $1}')"
 
   if (( repo_files > 0 )) && (( local_files >= repo_files )); then
@@ -129,9 +131,17 @@ download_model() {
 
   log "Downloading $model_id -> $dest_path"
   if [[ "$cli" == "hf" ]]; then
-    hf download "$model_id" --local-dir "$dest_path" --cache-dir "$HF_CACHE_DIR"
+    if [[ -n "$include_pattern" ]]; then
+      hf download "$model_id" --include "$include_pattern" --local-dir "$dest_path"
+    else
+      hf download "$model_id" --local-dir "$dest_path"
+    fi
   else
-    huggingface-cli download "$model_id" --local-dir "$dest_path" --cache-dir "$HF_CACHE_DIR"
+    if [[ -n "$include_pattern" ]]; then
+      huggingface-cli download "$model_id" --include "$include_pattern" --local-dir "$dest_path"
+    else
+      huggingface-cli download "$model_id" --local-dir "$dest_path"
+    fi
   fi
 }
 
@@ -140,20 +150,24 @@ main() {
   hf_download_cmd >/dev/null
   trap cleanup_runtime_dirs EXIT
 
+  require_var "TEACHER_MODEL_ID" "$TEACHER_MODEL_ID"
   require_var "STUDENT_MODEL_ID" "$STUDENT_MODEL_ID"
 
-  if (( STUDENT_SIZE_GB <= 0 )); then
-    die "STUDENT_SIZE_GB must be a positive integer."
+  if (( TEACHER_SIZE_GB <= 0 || STUDENT_SIZE_GB <= 0 )); then
+    die "TEACHER_SIZE_GB and STUDENT_SIZE_GB must be positive integers."
   fi
 
-  check_budget "$STUDENT_SIZE_GB" "$DISK_BUDGET_GB"
+  check_budget "$TEACHER_SIZE_GB" "$STUDENT_SIZE_GB" "$DISK_BUDGET_GB"
   check_free_space "$MODEL_ROOT" "$DISK_BUDGET_GB"
   prepare_runtime_dirs
   prepare_hf
 
-  download_model "$STUDENT_MODEL_ID" "$MODEL_ROOT"
+  download_model "$TEACHER_MODEL_ID" "$TEACHER_MODEL_FILE" "$MODEL_ROOT"
+  download_model "$STUDENT_MODEL_ID" "" "$MODEL_ROOT"
 
-  log "Student model download completed."
+  log "Model download completed."
+  log "Teacher model: $TEACHER_MODEL_ID"
+  log "Teacher file: $TEACHER_MODEL_FILE"
   log "Student model: $STUDENT_MODEL_ID"
   log "Saved under: $MODEL_ROOT"
 }
