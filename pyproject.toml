@@ -22,11 +22,18 @@ dependencies = ["sortedcontainers>=2.4"]
 download = [
   "huggingface_hub[cli]>=0.23.0",
 ]
+# Floors below are the lowest versions observed to actually import+train against
+# a recent LLaMA-Factory (commit cabe59a, 2026-06): it pins transformers>=4.55 and
+# transformers in turn requires accelerate>=1.3. Older floors (4.45 / 1.0) crash at
+# import (`make_flat_list_of_images`, accelerate require_version). torchaudio/
+# torchvision are NOT listed: LLaMA-Factory pulls them, and the only gotcha is the
+# CUDA build must match torch's (torch 2.5.1+cu124 -> torchaudio/vision cu124 wheels;
+# a cu13 wheel fails with `libcudart.so.13` / `torchvision::nms does not exist`).
 ml = [
   "torch>=2.4",
-  "transformers>=4.45,<5",
+  "transformers>=4.55,<5",
   "peft>=0.12",
-  "accelerate>=1.0",
+  "accelerate>=1.3",
   "datasets>=2.19",
   "trl>=0.9",
   "huggingface_hub>=0.23",
