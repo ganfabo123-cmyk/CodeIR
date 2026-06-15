@@ -26,7 +26,7 @@ LF_REPO="${LF_REPO:-https://github.com/hiyouga/LLaMA-Factory.git}"
 LF_REF="${LF_REF:-v0.9.2}"
 
 if [ "${FORCE_INSTALL:-0}" != "1" ] && \
-   python -c "import codeir, llamafactory, torch, transformers, peft, datasets" 2>/dev/null; then
+   python -c "import codeir, llamafactory, torch, transformers, peft, datasets, sortedcontainers" 2>/dev/null; then
   log "==== deps already present; skip install (FORCE_INSTALL=1 to force) ===="
 else
   python -m pip install --upgrade pip >/dev/null
@@ -41,6 +41,9 @@ else
   # 1b. codeir editable, no deps -> never disturbs the ML stack above.
   log "==== install codeir (--no-deps) ===="
   python -m pip install -e . --no-deps
+  # 1c. sortedcontainers: pure-python, needed by the verifier (dataset `prompt`
+  # imports it). --no-deps above skips it, so install it explicitly here.
+  python -m pip install sortedcontainers
 fi
 
 # ---- 2. validate api teacher env (.env) ----
