@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import time
 from pathlib import Path
@@ -118,6 +119,7 @@ def evaluate_compare(
     tests_dir = Path(test_tests_dir)
     baseline_rows: list = []
     experiment_rows: list = []
+    dump_records: list = []
 
     problem_paths = sorted(problem_dir.glob("*.json"))
     if limit > 0:
@@ -135,10 +137,11 @@ def evaluate_compare(
             model, tokenizer, "baseline",
             build_inference_prompt(INSTR_BASELINE, query), max_new_tokens,
         )
-        verified = verify_code(extract_python_code(text), tests).verified
+        b_code = extract_python_code(text)
+        b_res = verify_code(b_code, tests)
         baseline_rows.append({
             "problem_id": problem.problem_id, "difficulty": problem.difficulty,
-            "passed": verified, "tokens": tok, "wall_sec": round(time.time() - t0, 3),
+            "passed": b_res.verified, "tokens": tok, "wall_sec": round(time.time() - t0, 3),
         })
 
         t0 = time.time()
@@ -150,10 +153,24 @@ def evaluate_compare(
             model, tokenizer, "armB",
             build_inference_prompt(INSTR_ARM_B, ir_text), max_new_tokens,
         )
-        verified2 = verify_code(extract_python_code(code_text), tests).verified
+        e_code = extract_python_code(code_text)
+        e_res = verify_code(e_code, tests)
         experiment_rows.append({
             "problem_id": problem.problem_id, "difficulty": problem.difficulty,
-            "passed": verified2, "tokens": tok_a + tok_b, "wall_sec": round(time.time() - t0, 3),
+            "passed": e_res.verified, "tokens": tok_a + tok_b, "wall_sec": round(time.time() - t0, 3),
+        })
+
+        dump_records.append({
+            "problem_id": problem.problem_id,
+            "difficulty": problem.difficulty,
+            "baseline": {
+                "raw": text, "code": b_code, "passed": b_res.verified,
+                "passed_n": b_res.passed, "total": b_res.total, "error": b_res.error,
+            },
+            "experiment": {
+                "ir": ir_text, "raw_code": code_text, "code": e_code, "passed": e_res.verified,
+                "passed_n": e_res.passed, "total": e_res.total, "error": e_res.error,
+            },
         })
 
     baseline_summary = _summarize(baseline_rows)
@@ -167,6 +184,14 @@ def evaluate_compare(
     write_manifest(manifest_path, manifest)
 
     _write_report(report_path, baseline_summary, experiment_summary, delta)
+
+    # Per-problem raw dump: model outputs (baseline code / armA IR / armB code) +
+    # verifier pass/error, so failures can be inspected without re-running inference.
+    dump_path = Path(report_path).with_name(Path(report_path).stem + "_raw.jsonl")
+    with open(dump_path, "w", encoding="utf-8") as f:
+        for rec in dump_records:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
     return manifest
 
 
