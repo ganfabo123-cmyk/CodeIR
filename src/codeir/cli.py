@@ -87,6 +87,8 @@ def build_parser() -> argparse.ArgumentParser:
     eval_parser.add_argument("--report", default="artifacts/比对报告.md")
     eval_parser.add_argument("--max-new-tokens", type=int, default=1024)
     eval_parser.add_argument("--ir-max-new-tokens", type=int, default=512)
+    eval_parser.add_argument("--limit", type=int, default=0,
+                             help="evaluate only the first N test problems (0=all)")
     eval_parser.add_argument("--run-id", default="A-exp")
 
     derive_parser = subparsers.add_parser("derive", help="Derive SFT data from verified triples")
@@ -225,6 +227,7 @@ def main() -> None:
             report_path=args.report,
             max_new_tokens=args.max_new_tokens,
             ir_max_new_tokens=args.ir_max_new_tokens,
+            limit=args.limit,
             run_id=args.run_id,
         )
         print(json.dumps(manifest["verdict"], ensure_ascii=False))

@@ -24,6 +24,9 @@ python -m codeir.cli eval-compare \
   --test-tests-dir "$TEST_TESTS" \
   --manifest "$MANIFEST" \
   --report "$REPORT" \
+  --max-new-tokens 2048 \
+  --ir-max-new-tokens 1024 \
+  --limit "${LIMIT:-0}" \
   --run-id "$RUN_ID"
 
 log "DONE 03: report at $REPORT ; full metrics at $MANIFEST"

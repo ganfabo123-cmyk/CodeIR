@@ -104,6 +104,7 @@ def evaluate_compare(
     report_path,
     max_new_tokens: int = 1024,
     ir_max_new_tokens: int = 512,
+    limit: int = 0,
     run_id: str = "",
     config: dict | None = None,
 ) -> dict:
@@ -118,7 +119,10 @@ def evaluate_compare(
     baseline_rows: list = []
     experiment_rows: list = []
 
-    for problem_path in sorted(problem_dir.glob("*.json")):
+    problem_paths = sorted(problem_dir.glob("*.json"))
+    if limit > 0:
+        problem_paths = problem_paths[:limit]
+    for problem_path in problem_paths:
         problem = problem_from_dict(load_json(problem_path))
         tests_path = tests_dir / problem_path.name
         if not tests_path.exists():
