@@ -219,6 +219,12 @@ def derive_training_samples(
     ir_format: str = "yaml",
 ) -> None:
     rich_dict = to_rich_dict(triple.codeir)
+    # The teacher often leaves codeir.signature null, which strips the method
+    # interface from the IR. armB sees ONLY the IR, so without the signature it
+    # guesses the method name/params and the verifier raises AttributeError.
+    # triple.signature is the authoritative interface (LeetCode starter_code);
+    # force it into the IR so armA learns to emit it and armB has an anchor.
+    rich_dict["signature"] = triple.signature
     lean_dict = to_lean_dict(triple.codeir)
     rich_text = serialize_ir(rich_dict, fmt=ir_format)
     lean_text = serialize_ir(lean_dict, fmt=ir_format)
