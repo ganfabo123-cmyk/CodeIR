@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from pathlib import Path
 
 from .exporters import export_llamafactory_datasets
 from .infer import resolve_default_demo_prompt, run_adapter_inference
@@ -65,6 +66,11 @@ def build_parser() -> argparse.ArgumentParser:
     batch_parser.add_argument(
         "--abort-after-errors", type=int, default=8,
         help="Stop after N consecutive generation errors (API down/out of credit); 0 disables.",
+    )
+    batch_parser.add_argument(
+        "--skip-ids-file", default=None,
+        help="Newline-separated problem_ids to skip entirely (no API spend). "
+             "Use for known-bad drops you don't want to re-attempt.",
     )
 
     eval_parser = subparsers.add_parser(
@@ -172,6 +178,17 @@ def main() -> None:
         return
 
     if args.command == "distill-batch":
+        skip_ids: set[str] | None = None
+        if args.skip_ids_file:
+            skip_path = Path(args.skip_ids_file)
+            if not skip_path.exists():
+                parser.error(f"--skip-ids-file not found: {skip_path}")
+            skip_ids = {
+                line.strip()
+                for line in skip_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            }
+            print(f"skip-list: {len(skip_ids)} ids loaded from {skip_path}", flush=True)
         metrics = run_distillation_batch(
             problems_dir=args.problems_dir,
             tests_dir=args.tests_dir,
@@ -181,6 +198,7 @@ def main() -> None:
             ir_format=args.ir_format,
             resume=not args.no_resume,
             abort_after_errors=args.abort_after_errors,
+            skip_ids=skip_ids,
         )
         if args.manifest:
             from .metrics import update_section

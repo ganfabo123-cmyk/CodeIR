@@ -63,6 +63,11 @@ fi
 
 # ---- 5. API teacher generation over the TRAIN split ----
 log "==== distill-batch (provider=api) ===="
+SKIP_ARG=()
+if [ -n "$SKIP_IDS_FILE" ]; then
+  log "skip-list active: $SKIP_IDS_FILE"
+  SKIP_ARG=(--skip-ids-file "$SKIP_IDS_FILE")
+fi
 python -m codeir.cli distill-batch \
   --problems-dir "$TRAIN_PROBLEMS" \
   --tests-dir "$TRAIN_TESTS" \
@@ -70,7 +75,8 @@ python -m codeir.cli distill-batch \
   --provider api \
   --max-resamples "$MAX_RESAMPLES" \
   --manifest "$MANIFEST" \
-  --run-id "$RUN_ID"
+  --run-id "$RUN_ID" \
+  ${SKIP_ARG[@]+"${SKIP_ARG[@]}"}
 
 # ---- 6. export 3 SFT lines to LlamaFactory ----
 log "==== export-llamafactory ===="

@@ -109,3 +109,25 @@ python tools/scan_dropped.py \
 捞回方式（**纯增量、不重花已过的 245 个**）：装包后原样重跑 `bash deploy/01_prepare_and_gen.sh`
 （resume 默认开，跳过已有 `verified_triples/<pid>.json` 的题），过了的单题文件自动追加进
 `sft_*`，最后由 01 脚本的导出步骤重建合并后的 `codeir_llamafactory/*.jsonl`。
+
+---
+
+# 扩量重跑 + 跳过已知真错（SKIP_IDS_FILE）
+
+扩到更多训练题（如 500）时，已过的题靠 resume 自动跳过、0 API；但**真·模型 bug** 的题
+（树/skyline 那类）每轮都会被重采 `max_resamples+1` 次才掉，纯浪费。`--skip-ids-file`
+让它们直接跳过（不花 API、**不计入 dropped、不污染 ac_rate**，metrics 多一个 `skiplisted`）。
+
+skip 名单直接取**当前** manifest 的 `dropped_ids`（resume 重跑过一次后它已自愈、只剩真错）：
+
+```bash
+# 1) 从 manifest 生成 skip 名单
+python -c "import json;print('\n'.join(json.load(open('artifacts/A-exp/metrics_manifest.json'))['data_gen']['dropped_ids']))" > skip_ids.txt
+
+# 2) 扩量重跑:跳过真错,只对新题花 API
+SKIP_IDS_FILE=skip_ids.txt N_TRAIN=500 bash deploy/01_prepare_and_gen.sh
+```
+
+- 245 已过 → resume 跳过；真错 → skip-list 跳过；新增题 → 正常生成。
+- 日志里真错 id 显示 `-> skip (in skip-list)`，不再有 attempts。
+- 想强制重试某个被 skip 的题：从 `skip_ids.txt` 删掉那行即可（与 resume 正交，可随时增删）。

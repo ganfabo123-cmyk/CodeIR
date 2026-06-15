@@ -105,6 +105,7 @@ def run_distillation_batch(
     ir_format: str = "yaml",
     resume: bool = True,
     abort_after_errors: int = 8,
+    skip_ids: set[str] | None = None,
 ) -> dict:
     """Distill a directory of problems with one shared provider, then derive 3 lines.
 
@@ -122,6 +123,7 @@ def run_distillation_batch(
     kept = 0
     resumed = 0
     dropped = 0
+    skiplisted = 0
     attempts_total = 0
     dropped_ids: list[str] = []
     error_streak = 0
@@ -133,6 +135,11 @@ def run_distillation_batch(
     for idx, problem_path in enumerate(problem_paths, start=1):
         problem = problem_from_dict(load_json(problem_path))
         pid = problem.problem_id
+
+        if skip_ids and pid in skip_ids:
+            skiplisted += 1
+            print(f"[{idx}/{total_n}] {pid} -> skip (in skip-list)", flush=True)
+            continue
 
         if resume and (verified_dir / f"{pid}.json").exists():
             kept += 1
@@ -198,6 +205,7 @@ def run_distillation_batch(
         "kept": kept,
         "resumed": resumed,
         "dropped": dropped,
+        "skiplisted": skiplisted,
         "aborted": aborted,
         "avg_attempts": round(attempts_total / total, 2) if total else 0.0,
         "dropped_ids": dropped_ids,

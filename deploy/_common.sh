@@ -35,6 +35,8 @@ CUTOFF_LEN="${CUTOFF_LEN:-2048}"
 BATCH_SIZE="${BATCH_SIZE:-1}"
 GRAD_ACCUM="${GRAD_ACCUM:-8}"
 MAX_RESAMPLES="${MAX_RESAMPLES:-8}"
+# Optional: newline-separated problem_ids to skip in data-gen (known-bad drops). Empty = no skip.
+SKIP_IDS_FILE="${SKIP_IDS_FILE:-}"
 
 log() { printf '\n[%s] %s\n' "$(date '+%F %T')" "$*"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
