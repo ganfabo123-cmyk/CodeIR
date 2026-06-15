@@ -84,3 +84,28 @@ bash deploy/03_eval_compare.sh
 ## 可调参数（在命令前 export 即可）
 
 `N_TRAIN N_TEST EPOCHS LR CUTOFF_LEN BATCH_SIZE GRAD_ACCUM MAX_RESAMPLES HF_ENDPOINT LF_HOME`
+
+---
+
+# 对账：扫 dropped_ids（冤枉 vs 真错）
+
+排查 data_gen 的 ac 率被环境问题（缺包等）压低时用。对每道被 drop 的题，把它持久化的
+teacher_raw 生成代码重新喂进真实验证器跑一遍（**不重花 API**），归类输出「能捞回 / 真模型 bug /
+仍缺包 / 语法错 / 无样本」，并写 `scan_report.json`。
+
+**先装包再扫**（已知 LeetCodeDataset 的 `prompt` 会 `import sortedcontainers`，缺它会静默误杀一片）：
+
+```bash
+pip install sortedcontainers
+
+python tools/scan_dropped.py \
+  --run-json    /home/ganfabo/Projects/CodeIR/artifacts/A-exp/metrics_manifest.json \
+  --output-root /home/ganfabo/Projects/CodeIR/data/A-exp
+```
+
+- `--tests-dir` 默认 `<output-root>/raw_problems/train/tests`；teacher_raw 取 `<output-root>/teacher_raw`。
+- 输出末尾的 `RECOVERABLE` 数 = resume 重跑能捞回的题数；`REAL_WA/SYNTAX` 数 = 真·模型 bug，捞不回。
+
+捞回方式（**纯增量、不重花已过的 245 个**）：装包后原样重跑 `bash deploy/01_prepare_and_gen.sh`
+（resume 默认开，跳过已有 `verified_triples/<pid>.json` 的题），过了的单题文件自动追加进
+`sft_*`，最后由 01 脚本的导出步骤重建合并后的 `codeir_llamafactory/*.jsonl`。
