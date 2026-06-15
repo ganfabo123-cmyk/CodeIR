@@ -81,8 +81,11 @@ print(f"recorded {arm}: wall={wall}s loss={loss}")
 PYEOF
 }
 
-train_one baseline 16 baseline
-train_one armA 8 armA
-train_one armB 8 armB
+# ARMS selects which arms to (re)train. Default = all three.
+# e.g. ARMS="armA armB" bash deploy/02_train_three_lora.sh  (skip baseline)
+ARMS="${ARMS:-baseline armA armB}"
+case " $ARMS " in *" baseline "*) train_one baseline 16 baseline ;; esac
+case " $ARMS " in *" armA "*)     train_one armA 8 armA ;; esac
+case " $ARMS " in *" armB "*)     train_one armB 8 armB ;; esac
 
-log "DONE 02: 3 LoRA at $LORA_ROOT ; train metrics in $MANIFEST"
+log "DONE 02: trained [$ARMS] at $LORA_ROOT ; train metrics in $MANIFEST"
