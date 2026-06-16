@@ -11,9 +11,6 @@ from .schemas import dump_json
 # check() invocation is locked in verifier._build_check_runner (method-bound,
 # LeetCodeDataset convention) and must be re-confirmed on the first smoke run.
 
-_DIFFICULTY_RANK = {"easy": 0, "medium": 1, "hard": 2}
-
-
 def _slug(task_id: str) -> str:
     """Filesystem-safe problem id derived from the dataset task_id slug."""
     return re.sub(r"[^0-9a-zA-Z_-]", "_", str(task_id))
@@ -56,13 +53,56 @@ def _load_split(version: str | None, split: str):
     return load_dataset("newfacade/LeetCodeDataset", split=split)
 
 
-def _select_test(records: list[dict[str, Any]], n_test: int) -> list[dict[str, Any]]:
-    # Bias toward harder + newer (larger question_id) to fight ceiling effect.
-    def key(rec: dict[str, Any]):
-        rank = _DIFFICULTY_RANK.get(str(rec.get("difficulty", "")).lower(), 0)
-        return (rank, int(rec.get("question_id", 0) or 0))
+def _difficulty_of(rec: dict[str, Any]) -> str:
+    d = str(rec.get("difficulty", "")).lower()
+    return d if d in ("easy", "medium", "hard") else "medium"
 
-    return sorted(records, key=key, reverse=True)[:n_test]
+
+def _difficulty_counts(records: list[dict[str, Any]]) -> dict[str, int]:
+    counts = {"easy": 0, "medium": 0, "hard": 0}
+    for rec in records:
+        counts[_difficulty_of(rec)] += 1
+    return counts
+
+
+def _allocate(n: int, weights: dict[str, int]) -> dict[str, int]:
+    """Split n across buckets proportional to weights (largest-remainder)."""
+    total = sum(weights.values()) or 1
+    raw = {k: n * weights[k] / total for k in weights}
+    out = {k: int(v) for k, v in raw.items()}
+    short = n - sum(out.values())
+    for k in sorted(raw, key=lambda k: raw[k] - out[k], reverse=True)[:short]:
+        out[k] += 1
+    return out
+
+
+def _select_test(
+    records: list[dict[str, Any]], n_test: int, target_dist: dict[str, int]
+) -> list[dict[str, Any]]:
+    # Stratified: make the test difficulty mix mirror the TRAIN distribution
+    # (target_dist) instead of biasing toward the hardest. The old "hardest
+    # first" rule put the student in a band it had no training signal for
+    # (train ~27/58/15 easy/med/hard, test came out 0/21/79) -> floor effect.
+    # Best-effort: if a difficulty bucket is short, fill the shortfall from the
+    # remaining pool (deterministic by question_id).
+    buckets: dict[str, list[dict[str, Any]]] = {"easy": [], "medium": [], "hard": []}
+    for rec in records:
+        buckets[_difficulty_of(rec)].append(rec)
+    for b in buckets.values():
+        b.sort(key=lambda r: int(r.get("question_id", 0) or 0))
+
+    want = _allocate(n_test, target_dist)
+    selected: list[dict[str, Any]] = []
+    taken: set[str] = set()
+    for diff in ("easy", "medium", "hard"):
+        for rec in buckets[diff][: want[diff]]:
+            selected.append(rec)
+            taken.add(_slug(rec["task_id"]))
+    if len(selected) < n_test:
+        rest = [r for r in records if _slug(r["task_id"]) not in taken]
+        rest.sort(key=lambda r: int(r.get("question_id", 0) or 0))
+        selected.extend(rest[: n_test - len(selected)])
+    return selected[:n_test]
 
 
 def _select_train(records: list[dict[str, Any]], n_train: int) -> list[dict[str, Any]]:
@@ -102,7 +142,7 @@ def prepare_leetcode(
     train_ids = {_slug(r["task_id"]) for r in train_records}
     # Keep test disjoint from our train selection.
     test_pool = [r for r in test_split if _slug(r["task_id"]) not in train_ids]
-    test_records = _select_test(test_pool, n_test)
+    test_records = _select_test(test_pool, n_test, _difficulty_counts(train_records))
 
     counts = {"train": 0, "test": 0}
     for split_name, records in (("train", train_records), ("test", test_records)):

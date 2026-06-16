@@ -131,3 +131,46 @@ SKIP_IDS_FILE=skip_ids.txt N_TRAIN=500 bash deploy/01_prepare_and_gen.sh
 - 245 已过 → resume 跳过；真错 → skip-list 跳过；新增题 → 正常生成。
 - 日志里真错 id 显示 `-> skip (in skip-list)`，不再有 attempts。
 - 想强制重试某个被 skip 的题：从 `skip_ids.txt` 删掉那行即可（与 resume 正交，可随时增删）。
+
+---
+
+# 难度对齐重训：从已验证的 420 切 320 训 / 100 测（不重花 API）
+
+> 背景：原 split 训练池偏易（~27/58/15 易/中/难）、测试集却是最难优先（0/21/79），
+> 人为倒置导致学生贴地板。这里**复用已验证的 420 题**重切一个难度分布一致的 train/test，
+> 老师那步不重跑。新数据落在独立根 `data/A-exp-resplit/`，**不动 `data/A-exp/` 任何文件**。
+> GPU 用 4 号卡（`_common.sh` 默认 2/3 常被占，落上去会 CPU offload 极慢）。
+
+```bash
+cd /home/ganfabo/Projects/CodeIR
+git pull
+
+# 1) 切分：420 -> 320 训(verified_triples) + 100 测(raw_problems/test)，分层匹配难度
+python tools/resplit_verified.py --src data/A-exp --out data/A-exp-resplit \
+  --n-test 100 --seed 42
+# 期望输出：TRAIN 320 (easy=86 medium=187 hard=47) / TEST 100 (27/58/15) / overlap 0
+
+# 2) 从 320 verified 派生 SFT（输出进新根，sft_* 干净只含 320）
+python -m codeir.cli derive \
+  --verified-root data/A-exp-resplit/verified_triples \
+  --output-root   data/A-exp-resplit
+
+# 3) 导出 LlamaFactory 数据集
+python -m codeir.cli export-llamafactory \
+  --output-root data/A-exp-resplit \
+  --export-root artifacts/A-exp-resplit
+
+# 4) 三个 adapter 全重训（训练集从 420 缩到 320，baseline 也变，三个都要重训）
+RUN_ID=A-exp-resplit ARMS="baseline armA armB" CUDA_VISIBLE_DEVICES=4 \
+  bash deploy/02_train_three_lora.sh
+
+# 5) 在新的 100 题测试集上重评（先 LIMIT=5 冒烟，绿了再全量去掉 LIMIT）
+RUN_ID=A-exp-resplit LIMIT=5 CUDA_VISIBLE_DEVICES=4 bash deploy/03_eval_compare.sh
+RUN_ID=A-exp-resplit       CUDA_VISIBLE_DEVICES=4 bash deploy/03_eval_compare.sh
+```
+
+- 产物在 `artifacts/A-exp-resplit/`：`lora/{baseline,armA,armB}/`、`compare_report.md`
+  （这次 `by_difficulty` 三档都有量，baseline vs experiment 才有分辨率）、`compare_report_raw.jsonl`。
+- `RUN_ID=A-exp-resplit` 让 `_common.sh` 把 `DATA_ROOT`/`ARTIFACTS` 整体指向新根，deploy 脚本一字不改。
+- 注：`_select_test` 已改为分层匹配训练分布（不再最难优先）；本次复用 420 不走 `prepare-leetcode`，
+  那个修复只在将来重新 `prepare-leetcode` 拉数据时生效。
